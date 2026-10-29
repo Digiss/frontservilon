@@ -1,0 +1,358 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+@import 'shadcn/tailwind.css';
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+:root {
+  color-scheme: light;
+  --nw-primary: #008254;
+  --nw-primary-deep: #006642;
+  --nw-forest: #00482f;
+  --nw-lime-hero: #9ae600;
+  --nw-lime-panel: #e8fdac;
+  --nw-lime-accent: #ddfa88;
+  --nw-lime-ribbon: #a8ea4c;
+  --nw-canvas: #ffffff;
+  --nw-canvas-soft: #f7f7f7;
+  --nw-mint-50: #effcf8;
+  --nw-mint-100: #e3faf2;
+  --nw-mint-200: #b7ecda;
+  --nw-hairline: #ebebec;
+  --nw-hairline-strong: #d8d9da;
+  --nw-ink: #000000;
+  --nw-body: #3d4045;
+  --nw-muted: #64666a;
+  --nw-faint: #b1b3b5;
+  --nw-error: #de2828;
+  --background: var(--nw-canvas);
+  --foreground: var(--nw-body);
+  --card: var(--nw-canvas);
+  --card-foreground: var(--nw-ink);
+  --popover: var(--nw-canvas);
+  --popover-foreground: var(--nw-ink);
+  --primary: var(--nw-primary);
+  --primary-foreground: #ffffff;
+  --secondary: var(--nw-canvas-soft);
+  --secondary-foreground: var(--nw-primary);
+  --muted: var(--nw-canvas-soft);
+  --muted-foreground: var(--nw-muted);
+  --accent: var(--nw-mint-100);
+  --accent-foreground: var(--nw-primary);
+  --destructive: var(--nw-error);
+  --border: var(--nw-hairline);
+  --input: var(--nw-hairline-strong);
+  --ring: var(--nw-primary);
+  --chart-1: var(--nw-primary);
+  --chart-2: var(--nw-primary-deep);
+  --chart-3: var(--nw-lime-ribbon);
+  --chart-4: var(--nw-mint-200);
+  --chart-5: var(--nw-muted);
+  --radius: 0.375rem;
+  --sidebar: var(--nw-canvas);
+  --sidebar-foreground: var(--nw-body);
+  --sidebar-primary: var(--nw-primary);
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: var(--nw-mint-50);
+  --sidebar-accent-foreground: var(--nw-primary);
+  --sidebar-border: var(--nw-hairline);
+  --sidebar-ring: var(--nw-primary);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  body {
+    @apply bg-white text-[#3d4045];
+    min-width: 320px;
+    font-family: Gotham, GothamDisplay, Arial, sans-serif;
+  }
+}
+
+button {
+  cursor: pointer;
+}
+
+.servilon-app,
+.servilon-auth {
+  color: var(--nw-body);
+  font-family: Gotham, GothamDisplay, Arial, sans-serif;
+}
+
+.servilon-app [class*="bg-[#030507]"],
+.servilon-app [class*="bg-[#111827]"] {
+  border-color: var(--nw-hairline);
+  background-color: var(--nw-canvas);
+  color: var(--nw-body);
+}
+
+.servilon-app [class*="bg-[#087a39]"],
+.servilon-app [class~="bg-black"] {
+  background-color: var(--nw-primary);
+  color: #ffffff;
+}
+
+.servilon-app [class*="bg-gradient-to-br"] {
+  border-color: var(--nw-hairline);
+  background: var(--nw-mint-200);
+  color: var(--nw-primary-deep);
+}
+
+.servilon-app [class*="bg-[#dff3e5]"] {
+  background-color: var(--nw-canvas-soft);
+}
+
+.servilon-app [class*="bg-[#effbf2]"] {
+  background-color: var(--nw-mint-50);
+}
+
+.servilon-app [class*="bg-[#123f2c]"] {
+  background-color: var(--nw-mint-100);
+  color: var(--nw-primary);
+}
+
+.servilon-app [class*="bg-[#b9e5c8]"],
+.servilon-app [class*="bg-[#d5f2dd]"] {
+  background-color: var(--nw-mint-200);
+}
+
+.servilon-app [class*="bg-[#35d878]"] {
+  background-color: var(--nw-primary);
+  color: #ffffff;
+}
+
+.servilon-app [class*="border-[#35d878]"] {
+  border-color: var(--nw-primary);
+}
+
+.servilon-app [class*="bg-black/5"],
+.servilon-app [class*="bg-current/5"],
+.servilon-app [class*="bg-white/10"] {
+  background-color: var(--nw-canvas-soft);
+}
+
+.servilon-app [class*="text-[#35d878]"],
+.servilon-app [class*="text-[#087a39]"] {
+  color: var(--nw-primary);
+}
+
+.servilon-app [class*="text-white"] {
+  color: var(--nw-body);
+}
+
+.servilon-app [class*="bg-[#35d878]"],
+.servilon-app [class*="bg-[#087a39]"],
+.servilon-app [class~="bg-black"] {
+  color: #ffffff;
+}
+
+.servilon-app [class*="border-white/10"],
+.servilon-app [class*="border-black/10"],
+.servilon-app [class*="border-current/10"],
+.servilon-app [class*="border-current/15"],
+.servilon-app [class*="border-[#a8cdb4]"] {
+  border-color: var(--nw-hairline);
+}
+
+.servilon-app [class*="rounded-2xl"],
+.servilon-auth [class*="rounded-2xl"] {
+  border-radius: 8px;
+}
+
+.servilon-app [class*="rounded-xl"],
+.servilon-auth [class*="rounded-xl"] {
+  border-radius: 6px;
+}
+
+.servilon-app [class*="shadow-2xl"] {
+  box-shadow: none;
+}
+
+.servilon-app header {
+  border: 0;
+  border-radius: 6px;
+  background: var(--nw-primary);
+  color: #ffffff;
+  margin-bottom: 24px;
+  padding: 20px;
+}
+
+.servilon-app header h1 {
+  color: #ffffff;
+  font-size: 20px;
+  line-height: 1.3;
+}
+
+.servilon-app header p {
+  color: #ffffff;
+  opacity: 0.78;
+}
+
+.servilon-app header button,
+.servilon-app header [class*="text-[#087a39]"],
+.servilon-app header [class*="text-[#35d878]"] {
+  color: #ffffff;
+}
+
+.servilon-app nav {
+  border-color: var(--nw-hairline);
+  background: rgb(255 255 255 / 96%);
+  box-shadow: 0 -3px 14px rgb(0 0 0 / 4%);
+}
+
+.servilon-app nav button {
+  border-radius: 9999px;
+  color: var(--nw-muted);
+}
+
+.servilon-app nav button[class*="bg-[#b9e5c8]"],
+.servilon-app nav button[class*="bg-[#111a29]"] {
+  background: var(--nw-primary);
+  color: #ffffff;
+}
+
+.servilon-app input,
+.servilon-app textarea,
+.servilon-app select,
+.servilon-auth input,
+.servilon-auth textarea,
+.servilon-auth select {
+  border-color: var(--nw-hairline-strong);
+  border-radius: 4px;
+  background-color: #ffffff;
+  color: var(--nw-ink);
+}
+
+.servilon-app input:focus,
+.servilon-app textarea:focus,
+.servilon-app select:focus,
+.servilon-auth input:focus,
+.servilon-auth textarea:focus,
+.servilon-auth select:focus {
+  border-color: var(--nw-primary);
+  outline: 2px solid rgb(0 130 84 / 14%);
+}
+
+.servilon-auth {
+  background: var(--nw-canvas-soft);
+}
+
+.servilon-auth [class*="text-[#087a39]"] {
+  color: var(--nw-primary);
+}
+
+.servilon-auth [class*="bg-[#effbf2]"] {
+  background-color: var(--nw-mint-50);
+}
+
+.servilon-auth [class*="border-[#a8cdb4]"] {
+  border-color: var(--nw-hairline-strong);
+}
+
+.servilon-auth > div {
+  border: 1px solid var(--nw-hairline);
+  background: var(--nw-canvas);
+  padding: 28px;
+}
+
+.servilon-auth h1 {
+  font-size: 28px;
+  line-height: 1.25;
+}
+
+.servilon-auth button[class*="bg-[#087a39]"] {
+  border-radius: 4px;
+  background: var(--nw-primary);
+  color: #ffffff;
+}
+
+.servilon-app button,
+.servilon-auth button {
+  transition: background-color 140ms ease, color 140ms ease, border-color 140ms ease;
+}
+
+.servilon-app button:focus-visible,
+.servilon-auth button:focus-visible {
+  outline: 2px solid var(--nw-primary);
+  outline-offset: 2px;
+}
+
+.servilon-app article {
+  border-color: var(--nw-hairline);
+}
+
+.servilon-app [class*="home-welcome"] {
+  border-radius: 6px;
+  background: var(--nw-primary);
+  color: #ffffff;
+  padding: 20px;
+}
+
+.servilon-app [class*="home-welcome"] h1,
+.servilon-app [class*="home-welcome"] p {
+  color: #ffffff;
+}
+
+.servilon-app [class*="home-welcome"] h1 {
+  font-size: 24px;
+  line-height: 1.25;
+}
+
+@media (min-width: 700px) {
+  body {
+    background: var(--nw-canvas-soft);
+  }
+
+  .servilon-app > div:not(nav) {
+    padding-top: 40px;
+  }
+}
+
+@media (max-width: 480px) {
+  .servilon-auth > div {
+    padding: 24px 20px;
+  }
+}
