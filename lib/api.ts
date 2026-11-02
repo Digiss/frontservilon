@@ -1,5 +1,9 @@
 export type Role = 'cliente' | 'prestador'
 export type ActiveProfile = 'Client' | 'FreeLancer'
+export type Sector = { id: number; name: string }
+export type ServiceType = { id: number; name: string; sectorId: number }
+export type WorkStatus = { id: number; statusName: string }
+export type InterestArea = { id: number; serviceTypeId: number }
 export type UserSettings = { theme: 'claro' | 'escuro'; notificationsEnabled: boolean; privateJobs: boolean }
 
 export type CreateClientCommand = {
@@ -9,6 +13,7 @@ export type CreateClientCommand = {
   Name: string
   PhoneNumber: string
   PhotoUrl: string | null
+  Description?: string | null
   BirthDate: string
   Address: string | null
 }
@@ -21,15 +26,16 @@ export type CreateUserCommand = Omit<CreateClientCommand, 'Address'>
 export type CreatePostCommand = {
   Title: string
   Description: string
-  Price: number
-  DeliveryDays: string
-  DeliveryHours: string
+  MinimumPrice: number
+  MaximumPrice: number
+  DeliveryDays: number
   SectorId: number
   ServiceTypeId: number
 }
 
-export type UpdatePostCommand = Partial<Omit<CreatePostCommand, 'Price' | 'SectorId' | 'ServiceTypeId'>> & {
-  Price?: number
+export type UpdatePostCommand = Partial<Omit<CreatePostCommand, 'MinimumPrice' | 'MaximumPrice' | 'SectorId' | 'ServiceTypeId'>> & {
+  MinimumPrice?: number
+  MaximumPrice?: number
   SectorId?: number
   ServiceTypeId?: number
   WorkStatusId?: number
@@ -68,10 +74,37 @@ export type AppUser = {
   settings?: UserSettings
 }
 
-export type UpdateProfileCommand = Partial<Pick<AppUser, 'location' | 'bio' | 'skills' | 'availability' | 'serviceFormat' | 'links' | 'photoUrl' | 'sector' | 'subSector'>>
+export type UpdateProfileCommand = Partial<Pick<AppUser, 'location' | 'photoUrl'>>
 
 export type Application = { id: string; jobId: number; applicantId: string; clientId: string; message: string; status: 'pending' | 'accepted' | 'declined'; createdAt: string; jobTitle?: string; applicantName?: string }
 export type ServiceInvitation = { id: string; jobId: number; clientId: string; providerUserId: string; providerId: number; status: 'pending' | 'accepted' | 'declined'; createdAt: string; jobTitle: string; clientName: string; providerName: string }
+export type Negotiation = {
+  id: number
+  postId: number
+  clientId: number
+  freelancerId: number
+  isMessageActive: boolean
+  postOwnerProfileId: number
+  createdAt: string
+}
+export type NegotiationProposal = { id: number; price: number; deliveryDate: number }
+export type NegotiationMessage = {
+  messageId: number
+  senderId: number
+  isMine: boolean
+  content: string | null
+  createdAt: string
+  readAt: string | null
+  proposal: NegotiationProposal | null
+}
+export type NegotiationMessagesHistory = {
+  id: number
+  postId: number
+  clientId: number
+  freelancerId: number
+  isMessageActive: boolean
+  history: NegotiationMessage[]
+}
 export type Review = { id: string; jobId: number; providerId: number; providerUserId?: string; clientId: string; clientName?: string; rating: number; comment: string; createdAt: string }
 
 export type Service = {
@@ -102,7 +135,6 @@ export type Job = Alert & {
   clientId?: string
   providerId?: number
   providerUserId?: string
-  deliveryHours?: string
   workStatusId?: number
   sectorId?: number
   serviceTypeId?: number
@@ -116,12 +148,9 @@ export type Job = Alert & {
 }
 
 export type ChatMessage = { id: string; conversationId: string; sender: string; text: string; attachment?: { name: string; url: string }; createdAt: string; status: 'sent' | 'received' | 'read' | 'pending' }
-export type ContactRequest = { jobId: number; providerName: string; clientName: string; message: string }
 export type Notification = { id: string; type: 'success' | 'error' | 'info'; title: string; message: string; read: boolean; createdAt: string }
 export type Favorite = { userId: string; jobId: number; createdAt: string }
 export type JobFilters = { query?: string; category?: string; subSector?: string; sectorId?: number; serviceTypeId?: number; page?: number; pageSize?: number }
-export type Category = { id: number; name: string; count: number; icon: string; serviceTypes: string[] }
-
 export type ProviderProfile = {
   id: number
   userId?: string
@@ -240,19 +269,199 @@ async function getAllJobs(filters?: JobFilters): Promise<Job[]> {
   }
 }
 
+function parseWorkStatuses(response: unknown): WorkStatus[] {
+  const list = Array.isArray(response)
+    ? response
+    : response && typeof response === 'object' && 'postId' in response && Array.isArray(response.postId)
+      ? response.postId
+      : response && typeof response === 'object' && 'workStatusList' in response && Array.isArray(response.workStatusList)
+        ? response.workStatusList
+        : null
+  if (!list) throw new Error('A API retornou uma lista de status inválida.')
+  return list.map((item, index) => {
+    if (!item || typeof item !== 'object') {
+      throw new Error(`O status na posição ${index + 1} tem formato inválido.`)
+    }
+    const status = item as Record<string, unknown>
+    const id = Number(status.id ?? status.Id)
+    const statusName = status.statusName ?? status.StatusName
+    if (!Number.isInteger(id) || id < 1 || typeof statusName !== 'string' || !statusName.trim()) {
+      throw new Error(`O status na posição ${index + 1} tem identificadores inválidos.`)
+    }
+    return { id, statusName }
+  })
+}
+
+async function fetchWorkStatuses(): Promise<WorkStatus[]> {
+  return parseWorkStatuses(await request<unknown>('/api/work-statuses'))
+}
+
+function objectField(source: Record<string, unknown>, camelName: string, pascalName: string): unknown {
+  return source[camelName] ?? source[pascalName]
+}
+
+function parseNegotiation(item: unknown, index: number): Negotiation {
+  if (!item || typeof item !== 'object') {
+    throw new Error(`A negociação na posição ${index + 1} tem formato inválido.`)
+  }
+  const raw = item as Record<string, unknown>
+  const id = Number(objectField(raw, 'id', 'Id'))
+  const postId = Number(objectField(raw, 'postId', 'PostId'))
+  const clientId = Number(objectField(raw, 'clientId', 'ClientId'))
+  const freelancerId = Number(objectField(raw, 'freelancerId', 'FreelancerId'))
+  const postOwnerProfileId = Number(objectField(raw, 'postOwnerProfileId', 'PostOwnerProfileId'))
+  const isMessageActive = objectField(raw, 'isMessageActive', 'IsMessageActive')
+  const createdAt = objectField(raw, 'createdAt', 'CreatedAt')
+  if (
+    !Number.isInteger(id) || id < 1 ||
+    !Number.isInteger(postId) || postId < 1 ||
+    !Number.isInteger(clientId) || clientId < 1 ||
+    !Number.isInteger(freelancerId) || freelancerId < 1 ||
+    !Number.isInteger(postOwnerProfileId) || ![1, 2].includes(postOwnerProfileId) ||
+    typeof isMessageActive !== 'boolean' ||
+    typeof createdAt !== 'string'
+  ) {
+    throw new Error(`A negociação na posição ${index + 1} tem campos inválidos.`)
+  }
+  return {
+    id,
+    postId,
+    clientId,
+    freelancerId,
+    postOwnerProfileId,
+    isMessageActive,
+    createdAt,
+  }
+}
+
+function parseNegotiationMessages(response: unknown): NegotiationMessagesHistory {
+  if (!response || typeof response !== 'object') {
+    throw new Error('A API retornou um histórico de mensagens inválido.')
+  }
+  const raw = response as Record<string, unknown>
+  const id = Number(objectField(raw, 'id', 'Id'))
+  const postId = Number(objectField(raw, 'postId', 'PostId'))
+  const clientId = Number(objectField(raw, 'clientId', 'ClientId'))
+  const freelancerId = Number(objectField(raw, 'freelancerId', 'FreelancerId'))
+  const isMessageActive = objectField(raw, 'isMessageActive', 'IsMessageActive')
+  const historyValue = objectField(raw, 'history', 'History')
+  if (
+    !Number.isInteger(id) || id < 1 ||
+    !Number.isInteger(postId) || postId < 1 ||
+    !Number.isInteger(clientId) || clientId < 1 ||
+    !Number.isInteger(freelancerId) || freelancerId < 1 ||
+    typeof isMessageActive !== 'boolean' ||
+    !Array.isArray(historyValue)
+  ) {
+    throw new Error('A API retornou um histórico de mensagens com campos inválidos.')
+  }
+  const history = historyValue.map((item, index): NegotiationMessage => {
+    if (!item || typeof item !== 'object') {
+      throw new Error(`A mensagem na posição ${index + 1} tem formato inválido.`)
+    }
+    const message = item as Record<string, unknown>
+    const messageId = Number(objectField(message, 'messageId', 'MessageId'))
+    const senderId = Number(objectField(message, 'senderId', 'SenderId'))
+    const isMine = objectField(message, 'isMine', 'IsMine')
+    const content = objectField(message, 'content', 'Content')
+    const createdAt = objectField(message, 'createdAt', 'CreatedAt')
+    const readAt = objectField(message, 'readAt', 'ReadAt')
+    const proposalValue = objectField(message, 'proposal', 'Proposal')
+    let proposal: NegotiationProposal | null = null
+    if (proposalValue !== null && proposalValue !== undefined) {
+      if (typeof proposalValue !== 'object') {
+        throw new Error(`A proposta da mensagem ${messageId} tem formato inválido.`)
+      }
+      const rawProposal = proposalValue as Record<string, unknown>
+      const proposalId = Number(objectField(rawProposal, 'id', 'Id'))
+      const price = Number(objectField(rawProposal, 'price', 'Price'))
+      const deliveryDate = Number(objectField(rawProposal, 'deliveryDate', 'DeliveryDate'))
+      if (
+        !Number.isInteger(proposalId) || proposalId < 1 ||
+        !Number.isFinite(price) || price <= 0 ||
+        !Number.isInteger(deliveryDate) || deliveryDate < 1
+      ) {
+        throw new Error(`A proposta da mensagem ${messageId} tem campos inválidos.`)
+      }
+      proposal = { id: proposalId, price, deliveryDate }
+    }
+    if (
+      !Number.isInteger(messageId) || messageId < 1 ||
+      !Number.isInteger(senderId) || senderId < 1 ||
+      typeof isMine !== 'boolean' ||
+      (content !== null && typeof content !== 'string') ||
+      typeof createdAt !== 'string' ||
+      (readAt !== null && readAt !== undefined && typeof readAt !== 'string')
+    ) {
+      throw new Error(`A mensagem na posição ${index + 1} tem campos inválidos.`)
+    }
+    return {
+      messageId,
+      senderId,
+      isMine,
+      content: typeof content === 'string' ? content : null,
+      createdAt,
+      readAt: typeof readAt === 'string' ? readAt : null,
+      proposal,
+    }
+  })
+  return { id, postId, clientId, freelancerId, isMessageActive, history }
+}
+
 export const api = {
+  userExists: (identifier: string, profile: ActiveProfile) =>
+    request<unknown>('/api/auth/user-exists', { method: 'POST', body: JSON.stringify({ identifier, profile }) }),
   login: (payload: LoginCommand) => request<{ user: AppUser }>('/api/auth/login', { method: 'POST', body: JSON.stringify(payload) }).then(response => response.user),
   register: (profile: ActiveProfile, payload: CreateClientCommand | CreateFreeLancerCommand) =>
     request<{ user: AppUser }>('/api/auth/register', { method: 'POST', body: JSON.stringify({ profile, payload }) }).then(response => response.user),
   getSession: () => request<{ user: AppUser | null }>('/api/auth/session').then(response => response.user),
   convertClientToProvider: (UserId: number, CPF: string) =>
     request<{ user: AppUser }>('/api/auth/register-simplified-freelancer', { method: 'POST', body: JSON.stringify({ UserId, CPF }) }).then(response => response.user),
-  registerSimplifiedClient: (UserId: number) =>
-    request<{ user: AppUser }>('/api/auth/register-simplified-client', { method: 'POST', body: JSON.stringify({ UserId, Address: null }) }).then(response => response.user),
+  registerSimplifiedFreeLancer: (UserId: number, CPF: string) =>
+    request<{ user: AppUser }>('/api/auth/register-simplified-freelancer', { method: 'POST', body: JSON.stringify({ UserId, CPF }) }).then(response => response.user),
+  registerSimplifiedClient: (UserId: number, Address: string | null = null) =>
+    request<{ user: AppUser }>('/api/auth/register-simplified-client', { method: 'POST', body: JSON.stringify({ UserId, Address }) }).then(response => response.user),
   switchProfile: () =>
     request<{ user: AppUser }>('/api/auth/switch-profile', { method: 'POST' }).then(response => response.user),
   logout: () => request('/api/auth/logout', { method: 'POST' }),
-  getCategories: () => requestCollection<Category>('/api/categorias'),
+  getSectors: () => request<Sector[]>('/api/sectors'),
+  getServiceTypes: () => request<ServiceType[]>('/api/service-types'),
+  getWorkStatuses: fetchWorkStatuses,
+  getInterestAreas: async () => {
+    const response = await request<unknown>('/api/interest-areas')
+    const list = Array.isArray(response)
+      ? response
+      : response && typeof response === 'object' && 'interestAreaList' in response &&
+          Array.isArray(response.interestAreaList)
+        ? response.interestAreaList
+        : null
+    if (!list) throw new Error('A API retornou uma lista de áreas de interesse inválida.')
+    return list.map((item, index) => {
+      if (!item || typeof item !== 'object') {
+        throw new Error(`A área de interesse na posição ${index + 1} tem formato inválido.`)
+      }
+      const area = item as Record<string, unknown>
+      const id = Number(area.id ?? area.Id)
+      const serviceTypeId = Number(area.serviceTypeId ?? area.ServiceTypeId)
+      if (!Number.isInteger(id) || id < 1 || !Number.isInteger(serviceTypeId) || serviceTypeId < 1) {
+        throw new Error(`A área de interesse na posição ${index + 1} tem identificadores inválidos.`)
+      }
+      return { id, serviceTypeId }
+    })
+  },
+  createInterestArea: async (serviceTypeId: number) => {
+    const response = await request<{ interestAreaId?: number; InterestAreaId?: number }>('/api/interest-areas', {
+      method: 'POST',
+      body: JSON.stringify({ ServiceTypeId: serviceTypeId }),
+    })
+    const id = response.interestAreaId ?? response.InterestAreaId
+    if (!Number.isInteger(id) || !id || id < 1) {
+      throw new Error('A API não retornou o identificador da área de interesse criada.')
+    }
+    return { id, serviceTypeId }
+  },
+  deleteInterestArea: (id: number) =>
+    request<void>('/api/interest-areas', { method: 'DELETE', body: JSON.stringify({ InterestAreaId: id }) }),
   getServices: (type?: string) => requestCollection<Service>(`/api/servicos${type ? `?tipo=${encodeURIComponent(type)}` : ''}`),
   getAlerts: () => requestCollection<Alert>('/api/servicos/alertas'),
   getJobs: async (filters?: JobFilters) =>
@@ -304,6 +513,17 @@ export const api = {
       body: JSON.stringify({ WorkStatusId: workStatusId }),
     })
   },
+  cancelPost: async (id: number) => {
+    const statuses = await fetchWorkStatuses()
+    const cancelledStatus = statuses.find(status => status.statusName.trim().toLocaleLowerCase('pt-BR') === 'cancelado')
+    if (!cancelledStatus) {
+      throw new Error('A API não retornou o status "Cancelado"; o post não foi alterado.')
+    }
+    await request<void>(`/api/jobs/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ WorkStatusId: cancelledStatus.id }),
+    })
+  },
   deleteJob: (id: number) => request<Job>(`/api/jobs/${id}`, { method: 'DELETE' }),
   markReviewPending: (jobId: number) => request<Job>('/api/avaliacoes/pendente', { method: 'POST', body: JSON.stringify({ jobId }) }),
   confirmClientCompletion: (jobId: number) => request<Job>(`/api/jobs/${jobId}/complete`, { method: 'POST' }),
@@ -312,11 +532,101 @@ export const api = {
   getHistory: (type: HistoryType) => type === 'criados'
     ? request<Job[]>('/api/jobs?scope=own')
     : requestCollection<HistoryEntry>(`/api/historico?tipo=${type}`),
-  getMessages: (conversationId: string) => requestCollection<ChatMessage>(`/api/chat/mensagens?conversationId=${encodeURIComponent(conversationId)}`),
-  sendMessage: (payload: Omit<ChatMessage, 'id' | 'createdAt' | 'status'>) =>
-    request<ChatMessage>('/api/chat/mensagens', { method: 'POST', body: JSON.stringify(payload) }),
-  requestContact: (payload: ContactRequest) =>
-    request('/api/chat/solicitacoes', { method: 'POST', body: JSON.stringify(payload) }),
+  getNegotiations: async () => {
+    const response = await request<unknown>('/api/negotiations')
+    const list = Array.isArray(response)
+      ? response
+      : response && typeof response === 'object'
+        ? objectField(response as Record<string, unknown>, 'negotiations', 'Negotiations')
+        : null
+    if (Array.isArray(list)) return list.map(parseNegotiation)
+    throw new Error('A API retornou uma lista de negociações inválida.')
+  },
+  createNegotiation: async (postId: number) => {
+    const response = await request<{ negotiationId?: number; NegotiationId?: number }>('/api/negotiations', {
+      method: 'POST',
+      body: JSON.stringify({ PostId: postId }),
+    })
+    const negotiationId = response.negotiationId ?? response.NegotiationId
+    if (!Number.isInteger(negotiationId) || !negotiationId || negotiationId < 1) {
+      throw new Error('A API não retornou o identificador da negociação.')
+    }
+    return negotiationId
+  },
+  activateNegotiationMessages: (negotiationId: number) =>
+    request<void>(`/api/negotiations/${negotiationId}/active-messages`, { method: 'POST' }),
+  getNegotiationMessages: async (negotiationId: number, afterMessageId?: number) => {
+    const after = afterMessageId ? `?afterMessageId=${afterMessageId}` : ''
+    return parseNegotiationMessages(await request<unknown>(`/api/negotiations/${negotiationId}/messages${after}`))
+  },
+  sendNegotiationMessage: async (negotiationId: number, content: string) => {
+    const response = await request<unknown>('/api/messages', {
+      method: 'POST',
+      body: JSON.stringify({ NegotiationId: negotiationId, Content: content }),
+    })
+    if (!response || typeof response !== 'object') {
+      throw new Error('A API não retornou o identificador da mensagem.')
+    }
+    const raw = response as Record<string, unknown>
+    const messageId = Number(objectField(raw, 'messageId', 'MessageId'))
+    if (!Number.isInteger(messageId) || messageId < 1) {
+      throw new Error('A API não retornou o identificador da mensagem.')
+    }
+    return messageId
+  },
+  createProposal: async (negotiationId: number, price: number, deliveryDays: number) => {
+    const response = await request<unknown>('/api/proposals', {
+      method: 'POST',
+      body: JSON.stringify({ NegotiationId: negotiationId, Price: price, DeliveryDays: deliveryDays }),
+    })
+    if (!response || typeof response !== 'object') {
+      throw new Error('A API não retornou o identificador da proposta.')
+    }
+    const proposalId = Number(objectField(response as Record<string, unknown>, 'proposalId', 'ProposalId'))
+    if (!Number.isInteger(proposalId) || proposalId < 1) {
+      throw new Error('A API não retornou o identificador da proposta.')
+    }
+    return proposalId
+  },
+  acceptProposal: async (proposalId: number) => {
+    const response = await request<unknown>('/api/proposals/accept', {
+      method: 'POST',
+      body: JSON.stringify({ ProposalId: proposalId }),
+    })
+    if (!response || typeof response !== 'object') {
+      throw new Error('A API não retornou o identificador do serviço criado.')
+    }
+    const serviceId = Number(objectField(response as Record<string, unknown>, 'serviceId', 'ServiceId'))
+    if (!Number.isInteger(serviceId) || serviceId < 1) {
+      throw new Error('A API não retornou o identificador do serviço criado.')
+    }
+    return serviceId
+  },
+  getUnreadMessages: async () => {
+    const response = await request<unknown>('/api/messages/unread')
+    if (!response || typeof response !== 'object') {
+      throw new Error('A API retornou uma contagem de mensagens não lidas inválida.')
+    }
+    const raw = objectField(response as Record<string, unknown>, 'unreadMessages', 'UnreadMessages')
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+      throw new Error('A API retornou uma contagem de mensagens não lidas inválida.')
+    }
+    const counts: Record<number, number> = {}
+    for (const [id, count] of Object.entries(raw)) {
+      const negotiationId = Number(id)
+      const unreadCount = Number(count)
+      if (!Number.isInteger(negotiationId) || negotiationId < 1 || !Number.isInteger(unreadCount) || unreadCount < 0) {
+        throw new Error('A API retornou uma contagem de mensagens não lidas inválida.')
+      }
+      counts[negotiationId] = unreadCount
+    }
+    return counts
+  },
+  markNegotiationMessagesRead: (negotiationId: number, upToMessageId: number) =>
+    request<unknown>('/api/messages/read', {
+      method: 'POST',
+      body: JSON.stringify({ NegotiationId: negotiationId, UpToMessageId: upToMessageId }),
+    }),
   applyToJob: (payload: Pick<Application, 'jobId' | 'message'>) =>
     request<Application>('/api/candidaturas', { method: 'POST', body: JSON.stringify(payload) }),
   getApplications: (_userId?: string) => requestCollection<Application>('/api/candidaturas'),

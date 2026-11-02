@@ -11,7 +11,7 @@ export function ClientServiceCompletion({ job, onBack }: { job: Job; onBack: () 
   const [updating, setUpdating] = useState(false)
   if (reviewOpen) return <ReviewScreen jobId={job.id} providerId={job.providerId || 0} providerName={job.provider} onBack={() => { setReviewOpen(false); onBack() }} />
 
-  const dueDate = job.dueDate ? new Date(job.dueDate).toLocaleDateString('pt-BR') : job.duration
+  const dueDate = job.dueDate || job.duration || 'Não informado'
   const price = job.salaryMin === job.salaryMax ? `R$ ${job.salaryMin.toLocaleString('pt-BR')}` : `R$ ${job.salaryMin.toLocaleString('pt-BR')}–${job.salaryMax.toLocaleString('pt-BR')}`
   const updateStatus = async (nextStatus: Job['status']) => {
     setUpdating(true)

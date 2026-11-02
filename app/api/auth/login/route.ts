@@ -14,7 +14,7 @@ export async function POST(request: Request) {
       Password: string
       Profile: 'Client' | 'FreeLancer'
     }
-    const profile = body.Profile === 'FreeLancer' ? 1 : 0
+    const profile = body.Profile === 'FreeLancer' ? 2 : 1
     const backendResponse = await requestAuthBackend(request, 'Login', { ...body, Profile: profile })
     if (!backendResponse.ok) {
       const errorBody = await backendResponse.text()
