@@ -102,6 +102,13 @@ export async function POST(request: Request) {
     } catch {
       return NextResponse.json({ error: 'O corpo da solicitação deve ser um JSON válido.' }, { status: 400 })
     }
+    if (
+      !payload ||
+      typeof payload.Title !== 'string' || payload.Title.trim().length < 10 ||
+      typeof payload.Description !== 'string' || payload.Description.trim().length < 10
+    ) {
+      return NextResponse.json({ error: 'O título e a descrição devem ter pelo menos 10 caracteres.' }, { status: 400 })
+    }
     if (!Number.isInteger(payload.DeliveryDays) || payload.DeliveryDays < 1) {
       return NextResponse.json({ error: 'DeliveryDays deve ser um inteiro positivo.' }, { status: 400 })
     }

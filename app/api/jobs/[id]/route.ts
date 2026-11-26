@@ -5,8 +5,11 @@ import {
   servilonBackendResponse,
   unavailableBackendEndpoint,
 } from '@/lib/auth-backend'
+import { extractPosts, toAppJob } from '@/lib/post-mapper'
 
 type RouteContext = { params: Promise<{ id: string }> }
+type BackendPost = ReturnType<typeof extractPosts>[number]
+type PostLookupResult = { post: BackendPost | null; response: Response | null }
 type UpdatePostPayload = {
   Title?: string
   Description?: string
@@ -18,8 +21,47 @@ type UpdatePostPayload = {
   WorkStatusId?: number
 }
 
-export async function GET() {
-  return unavailableBackendEndpoint('/api/Post/GetPostById')
+async function findPostById(request: Request, endpoint: string, postId: number): Promise<PostLookupResult> {
+  const pageSize = 100
+  const seenIds = new Set<number>()
+
+  for (let page = 1; ; page += 1) {
+    const headers = new Headers({ Page: String(page), Limit: String(pageSize) })
+    const response = await requestServilonBackend(request, endpoint, { method: 'GET', headers })
+    if (!response.ok) return { post: null, response }
+
+    const posts = extractPosts(await response.json())
+    const match = posts.find(post => post.id === postId)
+    if (match) return { post: match, response: null }
+    if (posts.length < pageSize) return { post: null, response: null }
+    if (posts.every(post => seenIds.has(post.id))) {
+      throw new Error(`A API repetiu uma página de posts durante a busca pelo post ${postId}.`)
+    }
+
+    for (const post of posts) seenIds.add(post.id)
+  }
+}
+
+export async function GET(request: Request, context: RouteContext) {
+  const { id } = await context.params
+  const postId = Number(id)
+  if (!Number.isInteger(postId) || postId < 1) {
+    return NextResponse.json({ error: 'O identificador do post é inválido.' }, { status: 400 })
+  }
+
+  try {
+    const ownPosts = await findPostById(request, '/api/Post/GetPostsHistory', postId)
+    if (ownPosts.response) return servilonBackendResponse(ownPosts.response)
+    if (ownPosts.post) return NextResponse.json(toAppJob(ownPosts.post))
+
+    const visiblePosts = await findPostById(request, '/api/Post/GetPosts', postId)
+    if (visiblePosts.response) return servilonBackendResponse(visiblePosts.response)
+    if (visiblePosts.post) return NextResponse.json(toAppJob(visiblePosts.post))
+
+    return NextResponse.json({ error: `O post ${postId} não foi encontrado.` }, { status: 404 })
+  } catch (error) {
+    return authBackendErrorResponse(error)
+  }
 }
 
 export async function PATCH(request: Request, context: RouteContext) {

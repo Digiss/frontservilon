@@ -95,9 +95,30 @@ export function formatPostPriceRange(minimum: number, maximum: number) {
 }
 
 export function extractPosts(body: unknown): BackendPost[] {
-  if (Array.isArray(body)) return body as BackendPost[]
-  if (body && typeof body === 'object' && 'postList' in body && Array.isArray(body.postList)) {
-    return body.postList as BackendPost[]
-  }
-  throw new Error('A API retornou uma resposta de posts em formato inesperado.')
+  const list = Array.isArray(body)
+    ? body
+    : body && typeof body === 'object' && 'postList' in body && Array.isArray(body.postList)
+      ? body.postList
+      : null
+  if (!list) throw new Error('A API retornou uma resposta de posts em formato inesperado.')
+
+  return list.map((item, index) => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) {
+      throw new Error(`O post na posição ${index + 1} tem formato inválido.`)
+    }
+
+    const wrapper = item as Record<string, unknown>
+    const post = wrapper.post ?? wrapper.Post ?? wrapper
+    if (!post || typeof post !== 'object' || Array.isArray(post)) {
+      throw new Error(`O post na posição ${index + 1} tem formato inválido.`)
+    }
+
+    const rawPost = post as Record<string, unknown>
+    const id = Number(rawPost.id ?? rawPost.Id)
+    if (!Number.isInteger(id) || id < 1) {
+      throw new Error(`O post na posição ${index + 1} não tem um identificador válido.`)
+    }
+
+    return { ...rawPost, id } as BackendPost
+  })
 }

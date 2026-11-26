@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { api, type Negotiation, type Role } from '@/lib/api'
+import { api, type Negotiation, type Role, type ServiceRecord } from '@/lib/api'
 import { NegotiationChatScreen } from './negotiation-chat-screen'
 
 function Skeleton({ className = '' }: { className?: string }) {
@@ -31,10 +31,15 @@ export function NegotiationsScreen({
   const [unreadCounts, setUnreadCounts] = useState<Record<number, number>>({})
   const [postTitles, setPostTitles] = useState<Map<number, string>>(new Map())
   const [postTitlesLoaded, setPostTitlesLoaded] = useState(false)
+  const [postTitleError, setPostTitleError] = useState('')
+  const [titleRefreshCount, setTitleRefreshCount] = useState(0)
   const [selectedNegotiationId, setSelectedNegotiationId] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [displayedInitialError, setDisplayedInitialError] = useState(initialError)
+  const postIdsKey = negotiations === null
+    ? null
+    : [...new Set(negotiations.map(negotiation => negotiation.postId))].sort((a, b) => a - b).join(',')
 
   const loadInbox = useCallback(async (showLoading = false) => {
     if (showLoading) setLoading(true)
@@ -66,18 +71,69 @@ export function NegotiationsScreen({
   }, [loadInbox])
 
   useEffect(() => {
-    let active = true
-    const requests = role === 'prestador'
-      ? [api.getOwnJobs(), api.getJobFeed(1, 100)]
-      : [api.getOwnJobs()]
-    Promise.allSettled(requests).then(results => {
-      if (!active) return
-      const jobs = results.flatMap(result => result.status === 'fulfilled' ? result.value : [])
-      setPostTitles(new Map(jobs.map(job => [job.id, job.title])))
+    if (postIdsKey === null) return
+    if (!postIdsKey) {
+      setPostTitles(new Map())
       setPostTitlesLoaded(true)
-    })
+      setPostTitleError('')
+      return
+    }
+
+    let active = true
+    const postIds = postIdsKey.split(',').map(Number)
+    setPostTitlesLoaded(false)
+    setPostTitleError('')
+
+    const loadTitles = async () => {
+      const titles = new Map<number, string>()
+      const failures: string[] = []
+      let services: ServiceRecord[] = []
+
+      try {
+        services = await api.getServices()
+      } catch (reason) {
+        failures.push(reason instanceof Error
+          ? `Não foi possível carregar os títulos dos serviços: ${reason.message}`
+          : 'Não foi possível carregar os títulos dos serviços.')
+      }
+      if (!active) return
+
+      const negotiationPostIds = new Set(postIds)
+      for (const service of services) {
+        const title = service.title.trim()
+        if (
+          negotiationPostIds.has(service.postId) &&
+          title &&
+          title.toLocaleLowerCase('pt-BR') !== 'título indisponível'
+        ) {
+          titles.set(service.postId, title)
+        }
+      }
+
+      const missingPostIds = postIds.filter(postId => !titles.has(postId))
+      const postResults = await Promise.allSettled(missingPostIds.map(postId => api.getJob(postId)))
+      const unresolvedPostIds: number[] = []
+      postResults.forEach((result, index) => {
+        const postId = missingPostIds[index]
+        if (result.status === 'fulfilled' && typeof result.value.title === 'string' && result.value.title.trim()) {
+          titles.set(postId, result.value.title.trim())
+        } else {
+          unresolvedPostIds.push(postId)
+        }
+      })
+
+      if (unresolvedPostIds.length) {
+        failures.push(`Não foi possível encontrar o título dos posts ${unresolvedPostIds.map(id => `#${id}`).join(', ')}.`)
+      }
+      if (!active) return
+      setPostTitles(titles)
+      setPostTitlesLoaded(true)
+      setPostTitleError(failures.join(' '))
+    }
+
+    void loadTitles()
     return () => { active = false }
-  }, [role])
+  }, [postIdsKey, titleRefreshCount])
 
   useEffect(() => {
     if (initialNegotiationId === null) return
@@ -109,6 +165,10 @@ export function NegotiationsScreen({
     </>
     return <>
       {initialError && <p role="alert" className="mb-3 rounded-xl bg-red-500/10 p-3 text-[11px] text-red-600">{initialError}</p>}
+      {postTitleError && <p role="alert" className="mb-3 rounded-xl bg-red-500/10 p-3 text-[11px] text-red-600">
+        {postTitleError}{' '}
+        <button onClick={() => setTitleRefreshCount(count => count + 1)} className="font-bold underline">Tentar novamente</button>
+      </p>}
       <NegotiationChatScreen
         key={selectedNegotiation.id}
         negotiation={selectedNegotiation}
@@ -117,9 +177,6 @@ export function NegotiationsScreen({
         onBack={() => setSelectedNegotiationId(null)}
         onUpdated={() => { void refresh() }}
       />
-      <p className="mt-3 rounded-xl bg-current/5 p-3 text-[10px] opacity-60">
-        O cancelamento da negociação ainda não está disponível no backend.
-      </p>
     </>
   }
 
@@ -135,6 +192,10 @@ export function NegotiationsScreen({
       </div>
       <button onClick={() => { void loadInbox(true) }} className="ml-2 font-bold">Tentar novamente</button>
     </div>}
+    {postTitleError && <p role="alert" className="mb-3 rounded-xl bg-red-500/10 p-3 text-[11px] text-red-600">
+      {postTitleError}{' '}
+      <button onClick={() => setTitleRefreshCount(count => count + 1)} className="font-bold underline">Tentar novamente</button>
+    </p>}
     {loading && negotiations === null
       ? <Skeleton className="h-20 rounded-2xl" />
       : negotiations?.length

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { BookOpen, BriefcaseBusiness, ChevronRight, Leaf, Monitor, Palette, RefreshCw, Scale, Search, TrendingUp, Wrench } from 'lucide-react'
-import { api, type Job, type Role, type Sector, type ServiceType } from '@/lib/api'
+import { api, filterPostsWithoutServices, type Job, type Role, type Sector, type ServiceType } from '@/lib/api'
 import { formatPostPriceRange } from '@/lib/post-mapper'
 
 type PostSearchProps = { role: Role; onJob?: (job: Job) => void }
@@ -50,11 +50,15 @@ export function PostSearchScreen({ role, onJob }: PostSearchProps) {
     setLoadingPosts(true)
     setPostError('')
     try {
-      setPosts(await api.getAllJobs({
+      const [loadedPosts, services] = await Promise.all([
+        api.getAllJobs({
         query: searchQuery.trim() || undefined,
         sectorId: selectedSector.id,
         serviceTypeId: selectedServiceType.id,
-      }))
+        }),
+        api.getServiceHistory(),
+      ])
+      setPosts(filterPostsWithoutServices(loadedPosts, services))
     } catch (reason) {
       setPostError(reason instanceof Error ? reason.message : 'Não foi possível carregar os posts.')
     } finally {
@@ -69,8 +73,11 @@ export function PostSearchScreen({ role, onJob }: PostSearchProps) {
     setPostError('')
     if (selectedSector) {
       setLoadingPosts(true)
-      void api.getAllJobs({ sectorId: selectedSector.id, serviceTypeId: serviceType.id })
-        .then(setPosts)
+      void Promise.all([
+        api.getAllJobs({ sectorId: selectedSector.id, serviceTypeId: serviceType.id }),
+        api.getServiceHistory(),
+      ])
+        .then(([loadedPosts, services]) => setPosts(filterPostsWithoutServices(loadedPosts, services)))
         .catch(reason => setPostError(reason instanceof Error ? reason.message : 'Não foi possível carregar os posts.'))
         .finally(() => setLoadingPosts(false))
     }

@@ -70,6 +70,13 @@ export function PostCreateForm({ role, onCancel, onCreated }: Props) {
     event.preventDefault()
     setError('')
 
+    const title = form.Title.trim()
+    const description = form.Description.trim()
+    if (title.length < 10 || description.length < 10) {
+      setError('O título e a descrição devem ter pelo menos 10 caracteres.')
+      return
+    }
+
     const minimumPrice = Number(form.MinimumPrice)
     const maximumPrice = Number(form.MaximumPrice)
     const deliveryDays = Number(form.DeliveryDays)
@@ -91,8 +98,8 @@ export function PostCreateForm({ role, onCancel, onCreated }: Props) {
     setSaving(true)
     try {
       const payload: CreatePostCommand = {
-        Title: form.Title.trim(),
-        Description: form.Description.trim(),
+        Title: title,
+        Description: description,
         MinimumPrice: minimumPrice,
         MaximumPrice: maximumPrice,
         DeliveryDays: deliveryDays,
@@ -118,11 +125,11 @@ export function PostCreateForm({ role, onCancel, onCreated }: Props) {
     <form onSubmit={event => { void submit(event) }} className="space-y-3">
       <label className="block text-[10px] font-bold">
         Título
-        <input required maxLength={150} value={form.Title} onChange={event => update('Title', event.target.value)} className={inputClass} />
+        <input required minLength={10} maxLength={150} value={form.Title} onChange={event => update('Title', event.target.value)} className={inputClass} />
       </label>
       <label className="block text-[10px] font-bold">
         Descrição
-        <textarea required maxLength={2000} value={form.Description} onChange={event => update('Description', event.target.value)} className={`${inputClass} min-h-24`} />
+        <textarea required minLength={10} maxLength={2000} value={form.Description} onChange={event => update('Description', event.target.value)} className={`${inputClass} min-h-24`} />
       </label>
       <label className="block text-[10px] font-bold">
         {provider ? 'Preço mínimo (R$)' : 'Orçamento mínimo (R$)'}

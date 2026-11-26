@@ -4,19 +4,30 @@ import { useState } from 'react'
 import type { Job, Role } from '@/lib/api'
 import { formatPostPriceRange } from '@/lib/post-mapper'
 
-export function PostDetailsScreen({ post, role, onBack, onStartNegotiation }: {
+export function PostDetailsScreen({ post, role, onBack, onStartNegotiation, onViewProvider }: {
   post: Job
   role: Role
   onBack: () => void
   onStartNegotiation: (post: Job, message: string) => Promise<void>
+  onViewProvider: (providerId: number) => Promise<void>
 }) {
   const [starting, setStarting] = useState(false)
+  const [openingProvider, setOpeningProvider] = useState(false)
   const [introductoryMessage, setIntroductoryMessage] = useState('')
   const [error, setError] = useState('')
+  const [providerError, setProviderError] = useState('')
   const dark = role === 'prestador'
   const shell = dark ? 'border-white/10 bg-[#111827] text-white' : 'border-[#a8cdb4] bg-[#effbf2] text-black'
   const muted = dark ? 'text-white/60' : 'text-black/60'
   const deadline = post.dueDate || post.duration || 'Não informado'
+  const openProvider = () => {
+    if (post.providerId === undefined) return
+    setOpeningProvider(true)
+    setProviderError('')
+    void onViewProvider(post.providerId)
+      .catch(reason => setProviderError(reason instanceof Error ? reason.message : 'Não foi possível carregar o perfil do prestador.'))
+      .finally(() => setOpeningProvider(false))
+  }
 
   return <section>
     <header className="mb-5 flex items-start justify-between border-b border-current/15 pb-4">
@@ -46,7 +57,9 @@ export function PostDetailsScreen({ post, role, onBack, onStartNegotiation }: {
         />
       </label>
       {error && <p role="alert" className="mt-3 rounded-xl bg-red-500/10 p-3 text-[11px] text-red-600">{error}</p>}
-      <button
+      {providerError && <p role="alert" className="mt-3 rounded-xl bg-red-500/10 p-3 text-[11px] text-red-600">{providerError}</p>}
+      <div className={`mt-3 grid gap-2 ${role === 'cliente' && post.providerId !== undefined ? 'grid-cols-2' : 'grid-cols-1'}`}>
+        <button
           disabled={starting || !introductoryMessage.trim()}
           onClick={() => {
             setStarting(true)
@@ -55,10 +68,18 @@ export function PostDetailsScreen({ post, role, onBack, onStartNegotiation }: {
               .catch(reason => setError(reason instanceof Error ? reason.message : 'Não foi possível enviar a mensagem introdutória.'))
               .finally(() => setStarting(false))
           }}
-          className="mt-3 w-full rounded-xl bg-[#35d878] px-4 py-3 text-[11px] font-extrabold text-black disabled:opacity-50"
+          className="rounded-xl bg-[#35d878] px-4 py-3 text-[11px] font-extrabold text-black disabled:opacity-50"
         >
           {starting ? 'Iniciando negociação...' : 'Enviar mensagem'}
         </button>
+        {role === 'cliente' && post.providerId !== undefined && <button
+          disabled={openingProvider}
+          onClick={openProvider}
+          className="rounded-xl border border-[#087a39]/30 px-3 py-3 text-[11px] font-bold text-[#087a39] disabled:opacity-50"
+        >
+          {openingProvider ? 'Abrindo perfil...' : 'Ver perfil do prestador'}
+        </button>}
+      </div>
     </article>
   </section>
 }

@@ -76,8 +76,6 @@ export type AppUser = {
 
 export type UpdateProfileCommand = Partial<Pick<AppUser, 'location' | 'photoUrl'>>
 
-export type Application = { id: string; jobId: number; applicantId: string; clientId: string; message: string; status: 'pending' | 'accepted' | 'declined'; createdAt: string; jobTitle?: string; applicantName?: string }
-export type ServiceInvitation = { id: string; jobId: number; clientId: string; providerUserId: string; providerId: number; status: 'pending' | 'accepted' | 'declined'; createdAt: string; jobTitle: string; clientName: string; providerName: string }
 export type Negotiation = {
   id: number
   postId: number
@@ -85,6 +83,7 @@ export type Negotiation = {
   freelancerId: number
   isMessageActive: boolean
   postOwnerProfileId: number
+  negotiationStatusId: number
   createdAt: string
 }
 export type NegotiationProposal = { id: number; price: number; deliveryDate: number }
@@ -117,6 +116,31 @@ export type Service = {
   status: 'Fazendo' | 'Em análise' | 'Não iniciado' | 'Em planejamento' | 'Em andamento' | 'Pausado' | 'Concluído' | 'Cancelado' | 'Excluído' | 'Recusado' | 'Status desconhecido'
   provider: string
   rating: number
+}
+
+export type ServiceRecord = {
+  id: number
+  postId: number
+  proposalId: number
+  price: number
+  dateLimit: string
+  clientId: number
+  freelancerId: number
+  sectorId: number
+  serviceTypeId: number
+  workStatusId: number
+  status: string
+  startDate: string | null
+  endDate: string | null
+  title: string
+  description: string
+}
+
+export type ServiceReview = {
+  id: number
+  serviceId: number
+  note: number
+  about: string | null
 }
 
 export type Alert = Service & { urgency: 'ALTA' | 'MÉDIA'; postedAt: string; skills: string[] }
@@ -158,18 +182,19 @@ export type ProviderProfile = {
   role: string
   city: string
   rating: number
-  reviews: number
+  reviews: number | null
   photo: string
   photoUrl?: string | null
   bio: string
-  skills: string[]
+  skills?: string[]
   tags?: string[]
-  certifications: string[]
-  experience: string
+  certifications?: string[]
+  experience?: string
+  createdAt?: string
   services: string[]
-  sectors: string[]
-  completed: number
-  responseTime: string
+  sectors?: string[]
+  completed: number | null
+  responseTime?: string
   links?: { label: string; url: string }[]
   availability?: string
   serviceFormat?: string
@@ -187,11 +212,19 @@ class ApiRequestError extends Error {
 }
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const response = await fetch(path, {
-    ...options,
-    credentials: 'same-origin',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-  })
+  let response: Response
+  try {
+    response = await fetch(path, {
+      ...options,
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json', ...options?.headers },
+    })
+  } catch (error) {
+    if (error instanceof TypeError) {
+      throw new ApiRequestError('Erro de conexão. Verifique sua conexão com a internet e tente novamente.', 0)
+    }
+    throw error
+  }
   if (!response.ok) {
     let message = `Falha na solicitação (${response.status}).`
     try {
@@ -310,6 +343,7 @@ function parseNegotiation(item: unknown, index: number): Negotiation {
   const clientId = Number(objectField(raw, 'clientId', 'ClientId'))
   const freelancerId = Number(objectField(raw, 'freelancerId', 'FreelancerId'))
   const postOwnerProfileId = Number(objectField(raw, 'postOwnerProfileId', 'PostOwnerProfileId'))
+  const negotiationStatusId = Number(objectField(raw, 'negotiationStatusId', 'NegotiationStatusId'))
   const isMessageActive = objectField(raw, 'isMessageActive', 'IsMessageActive')
   const createdAt = objectField(raw, 'createdAt', 'CreatedAt')
   if (
@@ -318,6 +352,7 @@ function parseNegotiation(item: unknown, index: number): Negotiation {
     !Number.isInteger(clientId) || clientId < 1 ||
     !Number.isInteger(freelancerId) || freelancerId < 1 ||
     !Number.isInteger(postOwnerProfileId) || ![1, 2].includes(postOwnerProfileId) ||
+    !Number.isInteger(negotiationStatusId) || negotiationStatusId < 1 ||
     typeof isMessageActive !== 'boolean' ||
     typeof createdAt !== 'string'
   ) {
@@ -329,9 +364,87 @@ function parseNegotiation(item: unknown, index: number): Negotiation {
     clientId,
     freelancerId,
     postOwnerProfileId,
+    negotiationStatusId,
     isMessageActive,
     createdAt,
   }
+}
+
+function parseServiceHistory(response: unknown, statuses: WorkStatus[]): ServiceRecord[] {
+  const list = Array.isArray(response)
+    ? response
+    : response && typeof response === 'object'
+      ? objectField(response as Record<string, unknown>, 'serviceList', 'ServiceList')
+      : null
+  if (!Array.isArray(list)) throw new Error('A API retornou uma lista de serviços inválida.')
+
+  const statusNames = new Map(statuses.map(status => [status.id, status.statusName]))
+  return list.map((item, index) => {
+    if (!item || typeof item !== 'object') {
+      throw new Error(`O serviço na posição ${index + 1} tem formato inválido.`)
+    }
+
+    const raw = item as Record<string, unknown>
+    const id = Number(objectField(raw, 'id', 'Id'))
+    const postId = Number(objectField(raw, 'postId', 'PostId'))
+    const proposalId = Number(objectField(raw, 'proposalId', 'ProposalId'))
+    const price = Number(objectField(raw, 'price', 'Price'))
+    const clientId = Number(objectField(raw, 'clientId', 'ClientId'))
+    const freelancerId = Number(objectField(raw, 'freelancerId', 'FreelancerId'))
+    const sectorId = Number(objectField(raw, 'sectorId', 'SectorId'))
+    const serviceTypeId = Number(objectField(raw, 'serviceTypeId', 'ServiceTypeId'))
+    const workStatusId = Number(objectField(raw, 'workStatusId', 'WorkStatusId'))
+    const dateLimit = objectField(raw, 'dateLimit', 'DateLimit')
+    const startDate = objectField(raw, 'startDate', 'StartDate')
+    const endDate = objectField(raw, 'endDate', 'EndDate')
+    const postValue = objectField(raw, 'post', 'Post')
+    const post = postValue && typeof postValue === 'object' ? postValue as Record<string, unknown> : null
+
+    if (
+      !Number.isInteger(id) || id < 1 ||
+      !Number.isInteger(postId) || postId < 1 ||
+      !Number.isInteger(proposalId) || proposalId < 1 ||
+      !Number.isFinite(price) || price <= 0 ||
+      !Number.isInteger(clientId) || clientId < 1 ||
+      !Number.isInteger(freelancerId) || freelancerId < 1 ||
+      !Number.isInteger(sectorId) || sectorId < 1 ||
+      !Number.isInteger(serviceTypeId) || serviceTypeId < 1 ||
+      !Number.isInteger(workStatusId) || workStatusId < 1 ||
+      typeof dateLimit !== 'string'
+    ) {
+      throw new Error(`O serviço na posição ${index + 1} tem campos inválidos.`)
+    }
+
+    const nestedStatus = objectField(raw, 'workStatus', 'WorkStatus')
+    const statusName = nestedStatus && typeof nestedStatus === 'object'
+      ? objectField(nestedStatus as Record<string, unknown>, 'statusName', 'StatusName')
+      : undefined
+    const title = post ? objectField(post, 'title', 'Title') : undefined
+    const description = post ? objectField(post, 'description', 'Description') : undefined
+
+    return {
+      id,
+      postId,
+      proposalId,
+      price,
+      dateLimit,
+      clientId,
+      freelancerId,
+      sectorId,
+      serviceTypeId,
+      workStatusId,
+      status: typeof statusName === 'string' ? statusName : statusNames.get(workStatusId) || `Status ${workStatusId}`,
+      startDate: typeof startDate === 'string' ? startDate : null,
+      endDate: typeof endDate === 'string' ? endDate : null,
+      title: typeof title === 'string' && title.trim() ? title : 'Título indisponível',
+      description: typeof description === 'string' ? description : '',
+    }
+  })
+}
+
+export function filterPostsWithoutServices(posts: Job[], services: ServiceRecord[]): Job[] {
+  const servicePostIds = new Set(services.map(service => service.postId))
+  return posts.filter(post => !servicePostIds.has(post.id))
 }
 
 function parseNegotiationMessages(response: unknown): NegotiationMessagesHistory {
@@ -462,7 +575,30 @@ export const api = {
   },
   deleteInterestArea: (id: number) =>
     request<void>('/api/interest-areas', { method: 'DELETE', body: JSON.stringify({ InterestAreaId: id }) }),
-  getServices: (type?: string) => requestCollection<Service>(`/api/servicos${type ? `?tipo=${encodeURIComponent(type)}` : ''}`),
+  getServices: async () => {
+    const statuses = await fetchWorkStatuses()
+    const pageSize = 100
+    const services: ServiceRecord[] = []
+    let page = 1
+
+    while (true) {
+      const currentPage = parseServiceHistory(
+        await request<unknown>(`/api/services?page=${page}&limit=${pageSize}`),
+        statuses,
+      )
+      services.push(...currentPage)
+      if (currentPage.length < pageSize) return services
+      page += 1
+    }
+  },
+  getServiceHistory: async (serviceId?: number) => {
+    const services = await api.getServices()
+    return serviceId === undefined ? services : services.filter(service => service.id === serviceId)
+  },
+  getServiceParticipantNames: (clientId: number, freelancerId: number) => {
+    const query = new URLSearchParams({ clientId: String(clientId), freelancerId: String(freelancerId) })
+    return request<{ clientName: string; freelancerName: string }>(`/api/service-participants?${query}`)
+  },
   getAlerts: () => requestCollection<Alert>('/api/servicos/alertas'),
   getJobs: async (filters?: JobFilters) =>
     filterJobs(await request<Job[]>(jobsPath(filters, filters?.page || 1, filters?.pageSize || 50)), filters),
@@ -475,7 +611,7 @@ export const api = {
     method: favorite ? 'POST' : 'DELETE',
     body: JSON.stringify({ jobId }),
   }),
-  getNotifications: (_userId?: string) => requestCollection<Notification>('/api/notificacoes'),
+  getNotifications: (_userId?: string) => request<Notification[]>('/api/notificacoes'),
   markNotificationRead: (id: string) => request<Notification>(`/api/notificacoes/${encodeURIComponent(id)}`, { method: 'PATCH' }),
   createJob: (payload: CreatePostCommand) => request<Job>('/api/jobs', { method: 'POST', body: JSON.stringify(payload) }),
   updatePost: (id: number, payload: UpdatePostCommand) =>
@@ -513,6 +649,11 @@ export const api = {
       body: JSON.stringify({ WorkStatusId: workStatusId }),
     })
   },
+  updateServiceStatus: (serviceId: number, workStatusId: number) =>
+    request<void>('/api/services/status', {
+      method: 'POST',
+      body: JSON.stringify({ ServiceId: serviceId, WorkStatusId: workStatusId }),
+    }),
   cancelPost: async (id: number) => {
     const statuses = await fetchWorkStatuses()
     const cancelledStatus = statuses.find(status => status.statusName.trim().toLocaleLowerCase('pt-BR') === 'cancelado')
@@ -525,10 +666,48 @@ export const api = {
     })
   },
   deleteJob: (id: number) => request<Job>(`/api/jobs/${id}`, { method: 'DELETE' }),
-  markReviewPending: (jobId: number) => request<Job>('/api/avaliacoes/pendente', { method: 'POST', body: JSON.stringify({ jobId }) }),
-  confirmClientCompletion: (jobId: number) => request<Job>(`/api/jobs/${jobId}/complete`, { method: 'POST' }),
-  submitReview: (payload: Omit<Review, 'id' | 'createdAt'>) =>
-    request<Review>('/api/avaliacoes', { method: 'POST', body: JSON.stringify(payload) }),
+  getServiceReviews: async (serviceId: number): Promise<ServiceReview[]> => {
+    const response = await request<unknown>(`/api/reviews?serviceId=${serviceId}`)
+    const list = Array.isArray(response)
+      ? response
+      : response && typeof response === 'object'
+        ? objectField(response as Record<string, unknown>, 'reviews', 'Reviews')
+        : null
+    if (!Array.isArray(list)) throw new Error('A API retornou uma lista de avaliações inválida.')
+    return list.map((item, index) => {
+      if (!item || typeof item !== 'object') {
+        throw new Error(`A avaliação na posição ${index + 1} tem formato inválido.`)
+      }
+      const raw = item as Record<string, unknown>
+      const id = Number(objectField(raw, 'id', 'Id'))
+      const reviewServiceId = Number(objectField(raw, 'serviceId', 'ServiceId'))
+      const note = Number(objectField(raw, 'reviewNote', 'ReviewNote'))
+      const about = objectField(raw, 'about', 'About')
+      if (
+        !Number.isInteger(id) || id < 1 ||
+        reviewServiceId !== serviceId ||
+        !Number.isInteger(note) || note < 1 || note > 5 ||
+        (about !== null && about !== undefined && typeof about !== 'string')
+      ) {
+        throw new Error(`A avaliação na posição ${index + 1} tem campos inválidos.`)
+      }
+      return { id, serviceId: reviewServiceId, note, about: typeof about === 'string' ? about : null }
+    })
+  },
+  submitReview: async (serviceId: number, note: number, about: string) => {
+    const response = await request<unknown>('/api/reviews', {
+      method: 'POST',
+      body: JSON.stringify({ ServiceId: serviceId, Note: note, About: about.trim() || null }),
+    })
+    if (!response || typeof response !== 'object') {
+      throw new Error('A API não retornou o identificador da avaliação.')
+    }
+    const reviewId = Number(objectField(response as Record<string, unknown>, 'reviewId', 'ReviewId'))
+    if (!Number.isInteger(reviewId) || reviewId < 1) {
+      throw new Error('A API não retornou o identificador da avaliação.')
+    }
+    return reviewId
+  },
   getHistory: (type: HistoryType) => type === 'criados'
     ? request<Job[]>('/api/jobs?scope=own')
     : requestCollection<HistoryEntry>(`/api/historico?tipo=${type}`),
@@ -627,14 +806,16 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ NegotiationId: negotiationId, UpToMessageId: upToMessageId }),
     }),
-  applyToJob: (payload: Pick<Application, 'jobId' | 'message'>) =>
-    request<Application>('/api/candidaturas', { method: 'POST', body: JSON.stringify(payload) }),
-  getApplications: (_userId?: string) => requestCollection<Application>('/api/candidaturas'),
-  respondToApplication: (id: string, accept: boolean) =>
-    request<Application>(`/api/candidaturas/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify({ accept }) }),
-  getInvitations: () => requestCollection<ServiceInvitation>('/api/convites'),
-  createInvitation: (jobId: number, providerId: number) =>
-    request<ServiceInvitation>('/api/convites', { method: 'POST', body: JSON.stringify({ jobId, providerId }) }),
-  respondToInvitation: (id: string, accept: boolean) =>
-    request<ServiceInvitation>(`/api/convites/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify({ accept }) }),
+  applyToJob: async (payload: { jobId: number; message: string }) => {
+    const negotiations = await api.getNegotiations()
+    const existing = negotiations.find(item => item.postId === payload.jobId)
+    const negotiationId = existing?.id ?? await api.createNegotiation(payload.jobId)
+    if (payload.message.trim()) {
+      const history = await api.getNegotiationMessages(negotiationId)
+      if (!history.history.length) {
+        await api.sendNegotiationMessage(negotiationId, payload.message.trim())
+      }
+    }
+    return negotiationId
+  },
 }
